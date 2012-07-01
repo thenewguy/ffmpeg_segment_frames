@@ -43,6 +43,7 @@ typedef struct {
     int64_t recording_time;
     int has_video;
     AVIOContext *pb;
+    char *valid_frames_str;    /** delimited list of valid frames to start a new segment */
 } SegmentContext;
 
 static int segment_start(AVFormatContext *s)
@@ -259,6 +260,7 @@ static const AVOption options[] = {
     { "segment_list",      "output the segment list",                 OFFSET(list),    AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_list_size", "maximum number of playlist entries",      OFFSET(size),    AV_OPT_TYPE_INT,    {.dbl = 5},     0, INT_MAX, E },
     { "segment_wrap",      "number after which the index wraps",      OFFSET(wrap),    AV_OPT_TYPE_INT,    {.dbl = 0},     0, INT_MAX, E },
+    { "segment_valid_frames",     "set valid segment split frames",        OFFSET(valid_frames_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0,      E },
     { NULL },
 };
 
