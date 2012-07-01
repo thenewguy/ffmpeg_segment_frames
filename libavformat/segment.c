@@ -48,6 +48,7 @@ typedef struct {
     int64_t nb_valid_frames; /** count of valid frames */
     int64_t next_valid_frame; /** the next frame number that is valid for starting a new segment */
     int64_t next_valid_frame_index; /** array index of the current next_valid_frame */
+    int64_t frame_count; /** current video frame count */
 } SegmentContext;
 
 static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid_frames_str, int64_t *nb_valid_frames)
@@ -159,6 +160,7 @@ static int seg_write_header(AVFormatContext *s)
     seg->offset_time = 0;
     seg->recording_time = seg->time * 1000000;
     seg->nb_valid_frames = 0;
+    seg->frame_count = 0;
 
     oc = avformat_alloc_context();
 
@@ -279,6 +281,9 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
     }
+
+    if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+		seg->frame_count++;
 
     ret = oc->oformat->write_packet(oc, pkt);
 
