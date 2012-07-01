@@ -53,38 +53,38 @@ typedef struct {
 
 static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid_frames_str, int64_t *nb_valid_frames)
 {
-	char *p;
-	int64_t i;
-	char *frame = NULL;
-	
-	i = 0;
-	for (p = (char *) valid_frames_str; *p; p++)
-		if (*p == ',')
-			i++;
-	*nb_valid_frames = (int64_t) (i+1);
+    char *p;
+    int64_t i;
+    char *frame = NULL;
+    
+    i = 0;
+    for (p = (char *) valid_frames_str; *p; p++)
+        if (*p == ',')
+            i++;
+    *nb_valid_frames = (int64_t) (i+1);
 
-	*valid_frames = (int64_t *) av_realloc_f(NULL, sizeof(**valid_frames), i);
-	if (!*valid_frames) {
-		av_log(log_ctx, AV_LOG_ERROR, "Could not allocate valid frames array.\n");
-		return AVERROR(ENOMEM);
-	}
-	
-	i = 0;
-	frame = av_strtok(valid_frames_str, ",", &p);
-	while (frame) {
-		(*valid_frames)[i] = strtol(frame, NULL, 10);
+    *valid_frames = (int64_t *) av_realloc_f(NULL, sizeof(**valid_frames), i);
+    if (!*valid_frames) {
+        av_log(log_ctx, AV_LOG_ERROR, "Could not allocate valid frames array.\n");
+        return AVERROR(ENOMEM);
+    }
+    
+    i = 0;
+    frame = av_strtok(valid_frames_str, ",", &p);
+    while (frame) {
+        (*valid_frames)[i] = strtol(frame, NULL, 10);
 
-		if (i && (*valid_frames)[i] <= (*valid_frames)[i-1]) {
-			av_log(log_ctx, AV_LOG_ERROR,
-					"Valid frames must be specified in ascending order without duplicate values.\n");
-			return AVERROR(EINVAL);
-		}
+        if (i && (*valid_frames)[i] <= (*valid_frames)[i-1]) {
+            av_log(log_ctx, AV_LOG_ERROR,
+                    "Valid frames must be specified in ascending order without duplicate values.\n");
+            return AVERROR(EINVAL);
+        }
 
-		frame = av_strtok(NULL, ",", &p);
-		i++;
-	}
+        frame = av_strtok(NULL, ",", &p);
+        i++;
+    }
 
-	return 0;
+    return 0;
 }
 
 static int segment_start(AVFormatContext *s)
@@ -172,19 +172,19 @@ static int seg_write_header(AVFormatContext *s)
                               &s->interrupt_callback, NULL)) < 0)
             goto fail;
     
-	if (seg->valid_frames_str) {
-		if ((ret = parse_valid_frames(s, &seg->valid_frames, seg->valid_frames_str, &seg->nb_valid_frames)) < 0)
-			return ret;
+    if (seg->valid_frames_str) {
+        if ((ret = parse_valid_frames(s, &seg->valid_frames, seg->valid_frames_str, &seg->nb_valid_frames)) < 0)
+            return ret;
 
-		if (seg->nb_valid_frames) {
-			if (seg->valid_frames[0]) {
-				seg->next_valid_frame_index = 0;
-			} else {
-				seg->next_valid_frame_index = 1;
-			}
-			seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
-		}
-	}
+        if (seg->nb_valid_frames) {
+            if (seg->valid_frames[0]) {
+                seg->next_valid_frame_index = 0;
+            } else {
+                seg->next_valid_frame_index = 1;
+            }
+            seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
+        }
+    }
 
     for (i = 0; i< s->nb_streams; i++)
         seg->has_video +=
@@ -254,21 +254,21 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
     int64_t end_pts = seg->recording_time * seg->number;
     int ret;
     int can_split = (
-			seg->has_video
-			&& st->codec->codec_type == AVMEDIA_TYPE_VIDEO
-			&& pkt->flags & AV_PKT_FLAG_KEY
+            seg->has_video
+            && st->codec->codec_type == AVMEDIA_TYPE_VIDEO
+            && pkt->flags & AV_PKT_FLAG_KEY
     );
 
     if (can_split && av_compare_ts(pkt->pts, st->time_base, end_pts, AV_TIME_BASE_Q) < 0)
-    	can_split = 0;
+        can_split = 0;
 
     if (can_split && seg->nb_valid_frames) {
-    	if (seg->next_valid_frame < seg->frame_count && (seg->next_valid_frame_index + 1) < seg->nb_valid_frames) {
-    		seg->next_valid_frame_index++;
-    		seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
-    	}
-    	if (seg->next_valid_frame != seg->frame_count)
-			can_split = 0;
+        if (seg->next_valid_frame < seg->frame_count && (seg->next_valid_frame_index + 1) < seg->nb_valid_frames) {
+            seg->next_valid_frame_index++;
+            seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
+        }
+        if (seg->next_valid_frame != seg->frame_count)
+            can_split = 0;
     }
 
     if (can_split) {
@@ -297,7 +297,7 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
-		seg->frame_count++;
+        seg->frame_count++;
 
     ret = oc->oformat->write_packet(oc, pkt);
 
