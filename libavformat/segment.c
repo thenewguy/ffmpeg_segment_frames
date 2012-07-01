@@ -70,6 +70,13 @@ static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid
 	frame = av_strtok(valid_frames_str, ",", &p);
 	while (frame) {
 		(*valid_frames)[i] = strtol(frame, NULL, 10);
+
+		if (i && (*valid_frames)[i] <= (*valid_frames)[i-1]) {
+			av_log(log_ctx, AV_LOG_ERROR,
+					"Valid frames must be specified in ascending order without duplicate values.\n");
+			return AVERROR(EINVAL);
+		}
+
 		frame = av_strtok(NULL, ",", &p);
 		i++;
 	}
