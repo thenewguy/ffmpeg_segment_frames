@@ -44,7 +44,38 @@ typedef struct {
     int has_video;
     AVIOContext *pb;
     char *valid_frames_str;    /** delimited list of valid frames to start a new segment */
+    int64_t *valid_frames; /** holds parsed valid_frames_str */
+    int64_t nb_valid_frames; /** count of valid frames */
 } SegmentContext;
+
+static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid_frames_str, int64_t *nb_valid_frames)
+{
+	char *p;
+	int64_t i;
+	char *frame = NULL;
+	
+	i = 0;
+	for (p = (char *) valid_frames_str; *p; p++)
+		if (*p == ',')
+			i++;
+	*nb_valid_frames = (int64_t) (i+1);
+
+	*valid_frames = (int64_t *) av_realloc_f(NULL, sizeof(**valid_frames), i);
+	if (!*valid_frames) {
+		av_log(log_ctx, AV_LOG_ERROR, "Could not allocate valid frames array.\n");
+		return AVERROR(ENOMEM);
+	}
+	
+	i = 0;
+	frame = av_strtok(valid_frames_str, ",", &p);
+	while (frame) {
+		(*valid_frames)[i] = strtol(frame, NULL, 10);
+		frame = av_strtok(NULL, ",", &p);
+		i++;
+	}
+
+	return 0;
+}
 
 static int segment_start(AVFormatContext *s)
 {
@@ -118,6 +149,7 @@ static int seg_write_header(AVFormatContext *s)
     seg->number = 0;
     seg->offset_time = 0;
     seg->recording_time = seg->time * 1000000;
+    seg->nb_valid_frames = 0;
 
     oc = avformat_alloc_context();
 
@@ -128,6 +160,11 @@ static int seg_write_header(AVFormatContext *s)
         if ((ret = avio_open2(&seg->pb, seg->list, AVIO_FLAG_WRITE,
                               &s->interrupt_callback, NULL)) < 0)
             goto fail;
+    
+	if (seg->valid_frames_str) {
+		if ((ret = parse_valid_frames(s, &seg->valid_frames, seg->valid_frames_str, &seg->nb_valid_frames)) < 0)
+			return ret;
+	}
 
     for (i = 0; i< s->nb_streams; i++)
         seg->has_video +=
