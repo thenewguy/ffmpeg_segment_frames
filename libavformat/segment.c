@@ -43,7 +43,49 @@ typedef struct {
     int64_t recording_time;
     int has_video;
     AVIOContext *pb;
+    char *valid_frames_str;    /** delimited list of valid frames to start a new segment */
+    int64_t *valid_frames; /** holds parsed valid_frames_str */
+    int64_t nb_valid_frames; /** count of valid frames */
+    int64_t next_valid_frame; /** the next frame number that is valid for starting a new segment */
+    int64_t next_valid_frame_index; /** array index of the current next_valid_frame */
+    int64_t frame_count; /** current video frame count */
 } SegmentContext;
+
+static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid_frames_str, int64_t *nb_valid_frames)
+{
+    char *p;
+    int64_t i;
+    char *frame = NULL;
+    
+    i = 0;
+    for (p = (char *) valid_frames_str; *p; p++)
+        if (*p == ',')
+            i++;
+    *nb_valid_frames = (int64_t) (i+1);
+
+    *valid_frames = (int64_t *) av_realloc_f(NULL, sizeof(**valid_frames), i);
+    if (!*valid_frames) {
+        av_log(log_ctx, AV_LOG_ERROR, "Could not allocate valid frames array.\n");
+        return AVERROR(ENOMEM);
+    }
+    
+    i = 0;
+    frame = av_strtok(valid_frames_str, ",", &p);
+    while (frame) {
+        (*valid_frames)[i] = strtol(frame, NULL, 10);
+
+        if (i && (*valid_frames)[i] <= (*valid_frames)[i-1]) {
+            av_log(log_ctx, AV_LOG_ERROR,
+                    "Valid frames must be specified in ascending order without duplicate values.\n");
+            return AVERROR(EINVAL);
+        }
+
+        frame = av_strtok(NULL, ",", &p);
+        i++;
+    }
+
+    return 0;
+}
 
 static int segment_start(AVFormatContext *s)
 {
@@ -117,6 +159,8 @@ static int seg_write_header(AVFormatContext *s)
     seg->number = 0;
     seg->offset_time = 0;
     seg->recording_time = seg->time * 1000000;
+    seg->nb_valid_frames = 0;
+    seg->frame_count = 0;
 
     oc = avformat_alloc_context();
 
@@ -127,6 +171,20 @@ static int seg_write_header(AVFormatContext *s)
         if ((ret = avio_open2(&seg->pb, seg->list, AVIO_FLAG_WRITE,
                               &s->interrupt_callback, NULL)) < 0)
             goto fail;
+    
+    if (seg->valid_frames_str) {
+        if ((ret = parse_valid_frames(s, &seg->valid_frames, seg->valid_frames_str, &seg->nb_valid_frames)) < 0)
+            return ret;
+
+        if (seg->nb_valid_frames) {
+            if (seg->valid_frames[0]) {
+                seg->next_valid_frame_index = 0;
+            } else {
+                seg->next_valid_frame_index = 1;
+            }
+            seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
+        }
+    }
 
     for (i = 0; i< s->nb_streams; i++)
         seg->has_video +=
@@ -195,14 +253,28 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
     AVStream *st = oc->streams[pkt->stream_index];
     int64_t end_pts = seg->recording_time * seg->number;
     int ret;
+    int can_split = (
+            seg->has_video
+            && st->codec->codec_type == AVMEDIA_TYPE_VIDEO
+            && pkt->flags & AV_PKT_FLAG_KEY
+    );
 
-    if ((seg->has_video && st->codec->codec_type == AVMEDIA_TYPE_VIDEO) &&
-        av_compare_ts(pkt->pts, st->time_base,
-                      end_pts, AV_TIME_BASE_Q) >= 0 &&
-        pkt->flags & AV_PKT_FLAG_KEY) {
+    if (can_split && av_compare_ts(pkt->pts, st->time_base, end_pts, AV_TIME_BASE_Q) < 0)
+        can_split = 0;
 
-        av_log(s, AV_LOG_DEBUG, "Next segment starts at %d %"PRId64"\n",
-               pkt->stream_index, pkt->pts);
+    if (can_split && seg->nb_valid_frames) {
+        if (seg->next_valid_frame < seg->frame_count && (seg->next_valid_frame_index + 1) < seg->nb_valid_frames) {
+            seg->next_valid_frame_index++;
+            seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
+        }
+        if (seg->next_valid_frame != seg->frame_count)
+            can_split = 0;
+    }
+
+    if (can_split) {
+
+        av_log(s, AV_LOG_DEBUG, "Next segment starts at %d %"PRId64" with frame count of %"PRId64" \n",
+                       pkt->stream_index, pkt->pts, seg->frame_count);
 
         ret = segment_end(oc);
 
@@ -223,6 +295,9 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
     }
+
+    if (st->codec->codec_type == AVMEDIA_TYPE_VIDEO)
+        seg->frame_count++;
 
     ret = oc->oformat->write_packet(oc, pkt);
 
@@ -259,6 +334,7 @@ static const AVOption options[] = {
     { "segment_list",      "output the segment list",                 OFFSET(list),    AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,       E },
     { "segment_list_size", "maximum number of playlist entries",      OFFSET(size),    AV_OPT_TYPE_INT,    {.dbl = 5},     0, INT_MAX, E },
     { "segment_wrap",      "number after which the index wraps",      OFFSET(wrap),    AV_OPT_TYPE_INT,    {.dbl = 0},     0, INT_MAX, E },
+    { "segment_valid_frames",     "set valid segment split frames",        OFFSET(valid_frames_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0,      E },
     { NULL },
 };
 
