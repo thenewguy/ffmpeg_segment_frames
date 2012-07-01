@@ -46,6 +46,8 @@ typedef struct {
     char *valid_frames_str;    /** delimited list of valid frames to start a new segment */
     int64_t *valid_frames; /** holds parsed valid_frames_str */
     int64_t nb_valid_frames; /** count of valid frames */
+    int64_t next_valid_frame; /** the next frame number that is valid for starting a new segment */
+    int64_t next_valid_frame_index; /** array index of the current next_valid_frame */
 } SegmentContext;
 
 static int parse_valid_frames(void *log_ctx, int64_t **valid_frames, char *valid_frames_str, int64_t *nb_valid_frames)
@@ -171,6 +173,15 @@ static int seg_write_header(AVFormatContext *s)
 	if (seg->valid_frames_str) {
 		if ((ret = parse_valid_frames(s, &seg->valid_frames, seg->valid_frames_str, &seg->nb_valid_frames)) < 0)
 			return ret;
+
+		if (seg->nb_valid_frames) {
+			if (seg->valid_frames[0]) {
+				seg->next_valid_frame_index = 0;
+			} else {
+				seg->next_valid_frame_index = 1;
+			}
+			seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
+		}
 	}
 
     for (i = 0; i< s->nb_streams; i++)
