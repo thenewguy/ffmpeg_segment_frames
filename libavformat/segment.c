@@ -259,10 +259,10 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
 			&& pkt->flags & AV_PKT_FLAG_KEY
     );
 
-    if (av_compare_ts(pkt->pts, st->time_base, end_pts, AV_TIME_BASE_Q) < 0)
+    if (can_split && av_compare_ts(pkt->pts, st->time_base, end_pts, AV_TIME_BASE_Q) < 0)
     	can_split = 0;
 
-    if (seg->nb_valid_frames) {
+    if (can_split && seg->nb_valid_frames) {
     	if (seg->next_valid_frame < seg->frame_count && (seg->next_valid_frame_index + 1) < seg->nb_valid_frames) {
     		seg->next_valid_frame_index++;
     		seg->next_valid_frame = seg->valid_frames[seg->next_valid_frame_index];
